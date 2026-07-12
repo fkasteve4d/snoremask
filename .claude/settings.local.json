@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($sdk = \"$env:LOCALAPPDATA\\\\Android\\\\Sdk\"; New-Item -ItemType Directory -Force \"$sdk\\\\cmdline-tools\" | Out-Null; $zip = \"$env:TEMP\\\\cmdline-tools.zip\"; Write-Output \"Downloading Android command-line tools...\"; Invoke-WebRequest -Uri \"https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip\" -OutFile $zip; Write-Output \"Downloaded: $\\(\\(Get-Item $zip\\).Length\\) bytes\"; Expand-Archive -Path $zip -DestinationPath \"$sdk\\\\cmdline-tools\" -Force; if \\(Test-Path \"$sdk\\\\cmdline-tools\\\\cmdline-tools\"\\) { Rename-Item \"$sdk\\\\cmdline-tools\\\\cmdline-tools\" \"latest\" }; Write-Output \"Extracted to $sdk\\\\cmdline-tools\\\\latest\"; Get-ChildItem \"$sdk\\\\cmdline-tools\\\\latest\\\\bin\")",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Eclipse Adoptium\\\\jdk-21.0.7.6-hotspot\"; $g = \"C:\\\\Android\\\\tools\\\\gradle-8.9\\\\bin\\\\gradle.bat\"; $tmp = \"$env:TEMP\\\\wrapgen\"; Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue; New-Item -ItemType Directory -Force $tmp | Out-Null; Push-Location $tmp; & $g wrapper --gradle-version 8.9 --distribution-type bin -q; Pop-Location; Write-Output \"Generated. Copying into project...\"; Copy-Item \"$tmp\\\\gradlew\" \"D:\\\\SnoreMask\\\\gradlew\" -Force; Copy-Item \"$tmp\\\\gradlew.bat\" \"D:\\\\SnoreMask\\\\gradlew.bat\" -Force; New-Item -ItemType Directory -Force \"D:\\\\SnoreMask\\\\gradle\\\\wrapper\" | Out-Null; Copy-Item \"$tmp\\\\gradle\\\\wrapper\\\\gradle-wrapper.jar\" \"D:\\\\SnoreMask\\\\gradle\\\\wrapper\\\\gradle-wrapper.jar\" -Force; Get-ChildItem \"D:\\\\SnoreMask\\\\gradle\\\\wrapper\"; Get-Item \"D:\\\\SnoreMask\\\\gradlew.bat\" | Select-Object Name,Length)",
+      "PowerShell(Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; $sdk = \"$env:LOCALAPPDATA\\\\Android\\\\Sdk\"; $lic = \"$sdk\\\\licenses\"; New-Item -ItemType Directory -Force $lic | Out-Null; Set-Content -Path \"$lic\\\\android-sdk-license\" -Value \"`n24333f8a63b6825ea9c5514f83c2829b004d1fee`n8933bad161af4178b1185d1a37fbf41ea5269c55\" -NoNewline -Encoding ascii; Set-Content -Path \"$lic\\\\android-sdk-preview-license\" -Value \"`n84831b9409646a918e30573bab4c9c91346d8abd\" -NoNewline -Encoding ascii; Write-Output \"License files written:\"; Get-ChildItem $lic | Select-Object Name)",
+      "Bash(git --version)",
+      "Bash(gh --version)",
+      "Bash(git -C /d/SnoreMask rev-parse --is-inside-work-tree)",
+      "Bash(git config *)",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}
