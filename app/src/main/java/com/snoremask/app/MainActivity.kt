@@ -3,6 +3,7 @@ package com.snoremask.app
 import android.Manifest
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -52,8 +53,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.snoremask.app.audio.MaskState
+import com.snoremask.app.bt.BluetoothDialog
+import com.snoremask.app.bt.BtPrefs
 import com.snoremask.app.service.MaskingService
 
 class MainActivity : ComponentActivity() {
@@ -66,6 +70,13 @@ class MainActivity : ComponentActivity() {
         MaskState.baseLevel.value = prefs.getFloat(KEY_BASE, 0.08f)
         MaskState.maxLevel.value = prefs.getFloat(KEY_MAX, 0.50f)
         MaskState.sensitivity.value = prefs.getFloat(KEY_SENS, 0.5f)
+
+        // Re-arm the resident watcher on launch if a device is selected (also
+        // re-establishes it after a reboot or a full stop). Starting the foreground
+        // service while the activity is coming to the foreground keeps it privileged.
+        if (BtPrefs.getSelectedAddress(this) != null && !MaskState.running.value) {
+            MaskingService.arm(this)
+        }
 
         enableEdgeToEdge()
         setContent {
@@ -87,8 +98,39 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppScaffold(onPersist: (String, Float) -> Unit) {
+    val context = LocalContext.current
     var menuOpen by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
+    var showBluetooth by remember { mutableStateOf(false) }
+
+    // BLUETOOTH_CONNECT is required (API 31+) before listing paired devices.
+    val btPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) showBluetooth = true }
+
+    fun arm(address: String, name: String) {
+        BtPrefs.setSelected(context, address, name)
+        // Start the resident watcher now, while the app is in the foreground.
+        MaskingService.arm(context)
+    }
+
+    fun disarm() {
+        BtPrefs.setSelected(context, null, null)
+        MaskingService.disarm(context)
+    }
+
+    fun openBluetooth() {
+        menuOpen = false
+        val needsPerm = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.BLUETOOTH_CONNECT
+            ) != PackageManager.PERMISSION_GRANTED
+        if (needsPerm) {
+            btPermLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            showBluetooth = true
+        }
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -103,6 +145,10 @@ fun AppScaffold(onPersist: (String, Float) -> Unit) {
                         expanded = menuOpen,
                         onDismissRequest = { menuOpen = false }
                     ) {
+                        DropdownMenuItem(
+                            text = { Text("Bluetooth") },
+                            onClick = { openBluetooth() }
+                        )
                         DropdownMenuItem(
                             text = { Text("About") },
                             onClick = {
@@ -121,6 +167,12 @@ fun AppScaffold(onPersist: (String, Float) -> Unit) {
         )
     }
 
+    if (showBluetooth) {
+        BluetoothDialog(onClose = { address, name ->
+            showBluetooth = false
+            if (address.isEmpty()) disarm() else arm(address, name)
+        })
+    }
     if (showAbout) {
         AboutDialog(onDismiss = { showAbout = false })
     }
@@ -158,15 +210,16 @@ fun HomeScreen(
     val context = LocalContext.current
     val running by MaskState.running.collectAsStateWithLifecycle()
     val masking by MaskState.masking.collectAsStateWithLifecycle()
+    val waiting by MaskState.waiting.collectAsStateWithLifecycle()
     val base by MaskState.baseLevel.collectAsStateWithLifecycle()
     val max by MaskState.maxLevel.collectAsStateWithLifecycle()
     val sensitivity by MaskState.sensitivity.collectAsStateWithLifecycle()
     val micLevel by MaskState.micLevel.collectAsStateWithLifecycle()
 
-    // Request mic (required for detection) + notifications, then start the service.
+    // Request mic (required for detection) + notifications, then start masking.
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { MaskingService.start(context) }
+    ) { MaskingService.startNow(context) }
 
     Column(
         modifier = modifier
@@ -186,7 +239,8 @@ fun HomeScreen(
                     StatusDot(
                         color = when {
                             running && masking -> Color(0xFFE8C547) // swelled — snore
-                            running -> Color(0xFF4CAF50)            // armed, quiescent
+                            running -> Color(0xFF4CAF50)            // listening, quiescent
+                            waiting -> Color(0xFF5B9BD5)            // armed, waiting for earbuds
                             else -> Color(0xFF666666)               // stopped
                         }
                     )
@@ -195,6 +249,7 @@ fun HomeScreen(
                         text = when {
                             running && masking -> "Snore detected — masking"
                             running -> "Listening — quiescent floor"
+                            waiting -> "Waiting for earbuds…"
                             else -> "Stopped"
                         },
                         style = typography.titleMedium
